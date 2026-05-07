@@ -19,10 +19,10 @@ const app = express();
 // Information disclosure: remover header X-Powered-By
 app.disable('x-powered-by');
 
-// Confiar no proxy (iisnode/Azure App Service) para enxergar o IP real do
-// cliente em X-Forwarded-For — necessário para rate limiting funcionar
-// corretamente atrás do iisnode.
-app.set('trust proxy', 1);
+// Confiar em todos os proxies (iisnode + Azure App Service edge) para
+// usar o leftmost X-Forwarded-For como IP do cliente — necessário para
+// rate limiting funcionar atrás de múltiplos proxies do Azure.
+app.set('trust proxy', true);
 
 const PORT = process.env.PORT || 3001;
 
@@ -58,40 +58,29 @@ app.use(express.json());
 // Rate limiting (TD-6)
 // Aplica DEPOIS de helmet/cors/express.json para preservar preflight CORS,
 // mas ANTES das rotas para que o limiter governe o acesso.
-//
-// Atrás do Azure App Service (múltiplos proxies: edge + LB interno),
-// trust proxy=1 pode ler hop intermediário em vez do IP real do cliente.
-// keyGenerator pega SEMPRE o primeiro IP de X-Forwarded-For, que é o cliente.
-const clientIpKey = (req) => {
-  const xff = req.headers['x-forwarded-for'];
-  if (xff) {
-    const first = (Array.isArray(xff) ? xff[0] : xff.split(',')[0]).trim();
-    if (first) return first;
-  }
-  return req.ip;
-};
-
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100,
+  limit: 100,
   message: { error: 'Muitas requisições. Aguarde alguns minutos.' },
-  standardHeaders: true,
+  standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: clientIpKey,
 });
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  limit: 5,
   message: { error: 'Muitas tentativas. Aguarde alguns minutos.' },
-  standardHeaders: true,
+  standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: clientIpKey,
   // Só conta tentativas que falharam — usuário válido pode logar várias vezes
   skipSuccessfulRequests: true,
 });
 
-// /api/auth/login tem limiter mais estrito; demais endpoints usam o geral
+// IMPORTANTE: ordem dos middlewares
+// 1) Limiter mais ESTRITO primeiro, para que ele rode E sobrescreva os
+//    headers RateLimit-* na resposta (express-rate-limit v8 sobrescreve).
+// 2) Como `app.use(path, ...)` é prefix-match, /api/auth/login casa antes
+//    de /api se registrado primeiro.
 app.use('/api/auth/login', loginLimiter);
 app.use('/api', generalLimiter);
 

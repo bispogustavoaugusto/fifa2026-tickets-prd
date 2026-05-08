@@ -244,13 +244,69 @@ const WorldCupDetail: React.FC = () => {
             )}
 
             {/* Escalações da final */}
-            {finalLineup && (
+            {finalLineup && (() => {
+              // Extrai os 2 números do placar do tempo regulamentar
+              // (ex.: "Brasil 4×1 Itália" -> [4, 1]; "Argentina 3×3 França (4×2 nos pênaltis)" -> [3, 3])
+              const scoreMatch = cup.finalScore.match(/(\d+)\s*[×x]\s*(\d+)/);
+              const homeScore = scoreMatch ? parseInt(scoreMatch[1]) : null;
+              const awayScore = scoreMatch ? parseInt(scoreMatch[2]) : null;
+              // Sufixo: prorrogação, pênaltis, etc.
+              const suffixMatch = cup.finalScore.match(/\((.+?)\)/);
+              const suffix = suffixMatch ? suffixMatch[1] : null;
+
+              return (
               <Card className="rounded-2xl border-border">
                 <CardContent className="p-6">
                   <h2 className="font-display text-2xl mb-4 flex items-center gap-2">
                     <Goal className="w-6 h-6 text-primary" />
                     Escalações da final
                   </h2>
+
+                  {/* Placar grande no topo */}
+                  {homeScore !== null && awayScore !== null && (
+                    <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-gold/10 via-primary/5 to-gold/10 border border-gold/30">
+                      <div className="flex items-center justify-around gap-3">
+                        <div className="flex items-center gap-3 flex-1 justify-end">
+                          <span className="font-display text-lg md:text-xl text-right truncate">
+                            {finalLineup.home.team}
+                          </span>
+                          <img
+                            src={`https://flagcdn.com/w80/${finalLineup.home.iso}.png`}
+                            alt={finalLineup.home.team}
+                            className="w-10 h-7 object-cover rounded flex-shrink-0"
+                          />
+                        </div>
+                        <div className="font-display text-4xl md:text-5xl font-bold tabular-nums whitespace-nowrap">
+                          <span className={homeScore > awayScore ? 'text-gold' : ''}>
+                            {homeScore}
+                          </span>
+                          <span className="text-muted-foreground mx-2">×</span>
+                          <span className={awayScore > homeScore ? 'text-gold' : ''}>
+                            {awayScore}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 flex-1">
+                          <img
+                            src={`https://flagcdn.com/w80/${finalLineup.away.iso}.png`}
+                            alt={finalLineup.away.team}
+                            className="w-10 h-7 object-cover rounded flex-shrink-0"
+                          />
+                          <span className="font-display text-lg md:text-xl truncate">
+                            {finalLineup.away.team}
+                          </span>
+                        </div>
+                      </div>
+                      {suffix && (
+                        <div className="text-center text-sm text-muted-foreground mt-2 italic">
+                          {suffix}
+                        </div>
+                      )}
+                      <div className="text-center text-xs text-muted-foreground mt-1">
+                        {cup.finalVenue}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {[finalLineup.home, finalLineup.away].map((side, sideIdx) => {
                       const isWinner = sideIdx === 0; // home é sempre o vencedor nos meus dados
@@ -326,7 +382,8 @@ const WorldCupDetail: React.FC = () => {
                   </div>
                 </CardContent>
               </Card>
-            )}
+              );
+            })()}
           </div>
 
           {/* Sidebar com fatos rápidos */}

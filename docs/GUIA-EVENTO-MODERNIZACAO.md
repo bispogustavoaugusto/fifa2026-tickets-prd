@@ -193,12 +193,12 @@ Tudo num **novo Resource Group** PaaS, em **Central India** (mesma região da ap
 - [ ] **Conta Azure ativa** — a mesma do guia anterior.
 - [ ] **Bloco de notas** com o que você anotou na fase VM: `IP_DB` (privado da `vm-data`), `adminsql`/`Partiunuvem@2026`, `JWT_SECRET`, e o seu **domínio** (se fez a Fase 6 das VMs).
 - [ ] **Ferramentas de migração** (baixe agora, instale nas fases indicadas):
-  - **(Opcional) App Service Migration Assistant** — [appmigration.microsoft.com](https://appmigration.microsoft.com/). Só para ver o *assessment* (a publicação é por **zip deploy**, Fases 3.5/4.2). Se for usar, instala na `vm-bend`/`vm-fend`.
+  - **(Opcional) App Service Migration Assistant** — [appmigration.microsoft.com](https://appmigration.microsoft.com/). Só para ver o *assessment* (a publicação é por **zip deploy**, Fases 3.2/4.2). Se for usar, instala na `vm-bend`/`vm-fend`.
   - **Azure CLI** (se for publicar pela **Opção A**, na própria VM) — `winget install -e --id Microsoft.AzureCLI` ou [aka.ms/installazurecliwindows](https://aka.ms/installazurecliwindows). _Quem usar o **Cloud Shell** (Opção B) não precisa instalar nada._
   - **Azure Data Studio** — [aka.ms/azuredatastudio](https://aka.ms/azuredatastudio) (instala na `vm-data` na Fase 5; a extension **Azure SQL Migration** é adicionada dentro dele).
 - [ ] **(Opcional) Projeto do Azure Migrate (em branco)** — só necessário se você for rodar o **App Service Migration Assistant** para ver o *assessment*. Portal → busca **Azure Migrate** → **Create project** → **Resource group:** `rg-prd-tik-paas-cin-001` · **Project name:** `migr-prd-tk-cin-001` · **Geography:** a mais próxima → **Create**.
 
-> ℹ️ **Por que é opcional agora:** neste guia a **publicação é feita por zip deploy** (Fases 3.5/4.2), que **não usa** o assistant nem o projeto. O projeto do Azure Migrate só entra **se você quiser rodar o assistant pelo valor didático do assessment** — e, nesse caso, ele é **pré-requisito**: a versão atual do assistant exige um projeto na assinatura (mesmo para app único) e **trava sem ele** na tela "Azure Migrate Hub". O projeto fica **em branco** — sem appliance, sem discovery; é só o "guarda-chuva" do assessment. Como a API é **Node**, o assistant **só assessa, não publica** (ver Fase 3.5) — por isso o deploy real é sempre o zip.
+> ℹ️ **Por que é opcional agora:** neste guia a **publicação é feita por zip deploy** (Fases 3.2/4.2), que **não usa** o assistant nem o projeto. O projeto do Azure Migrate só entra **se você quiser rodar o assistant pelo valor didático do assessment** — e, nesse caso, ele é **pré-requisito**: a versão atual do assistant exige um projeto na assinatura (mesmo para app único) e **trava sem ele** na tela "Azure Migrate Hub". O projeto fica **em branco** — sem appliance, sem discovery; é só o "guarda-chuva" do assessment. Como a API é **Node**, o assistant **só assessa, não publica** (ver Fase 3.2) — por isso o deploy real é sempre o zip.
 
 **Alerta de orçamento:** Portal → **Cost Management → Budgets → + Add** → **$20/mês**, alerta em 80% e 100% → seu e-mail. (O PaaS é barato, mas o hábito é bom.)
 
@@ -284,41 +284,9 @@ Idem para o banco: a extension tem uma etapa **Assess** que lista *blocking issu
 
 > 💡 **Por que Windows + Node?** A sua API roda em **iisnode** (IIS hospedando Node). O App Service **Windows** usa exatamente esse mecanismo por baixo — então o `web.config` da API e a estrutura `src/` funcionam **sem reescrever nada**. (No Linux a API rodaria em Node "puro", mais moderno, mas exigiria remover o `web.config`/iisnode — fica como evolução.)
 
-#### 3.2 Habilitar HTTPS Only e TLS mínimo
+#### 3.2 Publicar a aplicação (zip deploy) — deixar o app no ar primeiro
 
-No `app-prd-tk-bend-cin-001` → **Settings → Configuration** (ou **TLS/SSL settings**):
-- **HTTPS Only:** **On**
-- **Minimum TLS Version:** **1.2** · **FTP state:** **Disabled**
-
-#### 3.3 VNet Integration — para o Web App alcançar a `vm-data` (ainda na VM)
-
-O banco ainda está na `vm-data` (IP privado, outra região). Para o Web App falar com ele, ative **VNet Integration**.
-
-1. Primeiro, crie uma **subnet dedicada** na VNet de app (o App Service exige uma subnet só dele): Portal → `vnet-prd-inf-cin-001` → **Subnets** → **+ Subnet** → **Name:** `snet-prd-inf-appsvc-cin-001` · **Range:** `10.20.3.0/24` · **Delegation:** **Microsoft.Web/serverFarms** → **Save**.
-2. No `app-prd-tk-bend-cin-001` → **Settings → Networking** → **Outbound traffic → VNet integration** → **Add** → escolha `vnet-prd-inf-cin-001` / `snet-prd-inf-appsvc-cin-001`.
-3. Ainda em Networking, garanta **Route All / Outbound internet traffic** habilitado para que o tráfego vá pela VNet (e alcance a outra região via **peering**).
-
-> 💡 **Por que isso é necessário (por enquanto)?** Azure SQL terá endpoint público, mas o **SQL Server na VM não** — ele só responde no IP privado. A VNet Integration "pluga" o Web App na sua rede; o **peering global** (que você criou na fase VM) leva o pacote até a `vm-data` em Australia East. A NSG do banco já libera `1433` da faixa `10.20.0.0/16`, então **não precisa mexer no NSG**. Na **Fase 5** essa integração é removida.
-
-#### 3.4 App Settings (as variáveis que estavam no `.env`)
-
-No `app-prd-tk-bend-cin-001` → **Settings → Environment variables → App settings** → **+ Add** (uma por uma) → **Apply**:
-
-| Nome | Valor |
-|---|---|
-| `DB_SERVER` | `<IP_DB>` (IP privado da `vm-data`, ex.: `10.30.1.4`) |
-| `DB_PORT` | `1433` |
-| `DB_USER` | `adminsql` |
-| `DB_PASSWORD` | `Partiunuvem@2026` |
-| `DB_NAME` | `FIFA2026Tickets` |
-| `JWT_SECRET` | a mesma string longa que você usou na VM |
-| `JWT_EXPIRES_IN` | `7d` |
-| `FRONTEND_URL` | `*` (ajustamos para a URL do front na Fase 4) |
-| `WEBSITE_NODE_DEFAULT_VERSION` | `~20` |
-
-> ⚠️ **Não existe `PORT=80` aqui.** No App Service **quem define a porta é a plataforma** — o iisnode injeta a porta certa e sua API já lê `process.env.PORT`. Por isso **não** adicione `PORT` nem `HOST` nas App Settings (deixe a plataforma mandar).
-
-#### 3.5 Publicar a aplicação (zip deploy)
+> 🎯 **Estratégia:** publicamos o código **logo após criar o Web App**, antes das demais configurações. Primeiro confirmamos que o app **sobe e responde** (`/api/health`); só então adicionamos HTTPS (3.3), a rede até o banco (3.4) e as variáveis (3.5). Vantagem didática: se o `/api/health` responde, o **runtime Node está OK** — qualquer problema daí pra frente é **configuração**, não publicação.
 
 > 🧩 **Por que não publicar pelo App Service Migration Assistant?** O assistant **avalia** qualquer site IIS e envia o *assessment* para o projeto do Azure Migrate (a tela **"Azure Migrate Hub"** → *Sending data complete*), mas a etapa de **publicar o conteúdo é só para .NET**. Como a API é **Node**, o assistant **vai até o assessment e para** — não aparece botão de finalizar/`Migrate`. Então: deixe o assistant rodar o assessment se quiser (é didático e popula o projeto do Azure Migrate), mas **quem publica o Node é o zip deploy** abaixo. Este é o método da **"linha A"** — mesmo resultado que o assistant daria para um app .NET.
 
@@ -355,7 +323,102 @@ az webapp deploy -g rg-prd-tik-paas-cin-001 -n app-prd-tk-bend-cin-001 --src-pat
 
 > 📋 **Descobrir tenant e subscription:** `az account show --query "{tenant:tenantId, subscription:id, nome:name}" -o table`. No Portal: **Microsoft Entra ID** mostra o *Tenant ID*; **Subscriptions** mostra o *Subscription ID*.
 
-> ✅ **Depois de publicar (qualquer opção):** confirme no Portal que o Web App está com **Runtime = Node 20 / OS = Windows** (Fase 3.1) e que o `web.config` chegou (Kudu → `site/wwwroot/`). A validação funcional é a Fase 3.6.
+> ⏳ **O deploy retornou `500 - The request timed out`? É NORMAL — não refaça às cegas.** Com `node_modules` (dezenas de milhares de arquivos pequenos), a extração no storage de rede do App Service passa do tempo da **resposta HTTP** — mas **o deploy continua no servidor e conclui com sucesso**. Em vez de repetir o comando, **acompanhe a conclusão**:
+> - **Portal → o Web App → `Deployment Center` → aba `Logs`** — o deploy aparece e muda para **`Success`**; ou
+> - abra `https://<APP>.scm.azurewebsites.net/api/deployments/latest` — deve terminar com status de sucesso (`"complete": true`).
+>
+> **Quando concluir, teste a saúde da API:**
+> ```powershell
+> Invoke-RestMethod "https://app-prd-tk-bend-cin-001.azurewebsites.net/api/health"   # esperado: status = ok
+> ```
+> Se o `/api/health` responde, **o app está no ar** ✅. (O `/api/health/db` ainda vai falhar **de propósito** — o banco só conecta depois da **VNet** (3.4) e das **App Settings** (3.5). A validação completa é a Fase 3.6.)
+
+> ✅ **Confirmação extra (Portal/Kudu):** Web App com **Runtime = Node 20 / OS = Windows** (Fase 3.1) e o `web.config` presente em **Kudu → `site/wwwroot/`**.
+
+> 🔧 **E se o deploy NÃO concluir mesmo** (continua falhando depois de acompanhar os Deployments)? Aí o `node_modules` é grande demais para o storage de rede. Correção recomendada: **não suba `node_modules`** — deixe a plataforma instalar (Oryx build):
+> ```powershell
+> # liga o build no servidor (uma vez por Web App)
+> az webapp config appsettings set -g <RG> -n <APP> --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
+>
+> # zip SEM node_modules — só src, web.config, package.json e package-lock.json
+> cd C:\inetpub\wwwroot\fifa2026-api
+> Compress-Archive -Path .\src,.\web.config,.\package.json,.\package-lock.json -DestinationPath ..\fifa2026-api.zip -Force
+>
+> # deploy (pacote minúsculo; o servidor roda o npm install)
+> az webapp deploy -g <RG> -n <APP> --src-path ..\fifa2026-api.zip --type zip
+> ```
+> O `package-lock.json` **precisa ir junto**. As deps da API são **JavaScript puro** (`bcryptjs`, `mssql`, `tedious`), então o build no servidor funciona sem compilação nativa. _Alternativas:_ `WEBSITE_RUN_FROM_PACKAGE=1` (monta o zip com `node_modules` sem extrair — mas deixa o `wwwroot` read-only e **mata o log do iisnode** em `src/logs`), ou o band-aid `az webapp deploy ... --timeout 900000 --clean true`.
+>
+> 💡 Tudo isso é **específico do backend**. O **frontend** (Fase 4.2) é estático, **não tem `node_modules`** — zip leve, sem timeout.
+
+#### 3.3 Habilitar HTTPS Only e TLS mínimo
+
+No `app-prd-tk-bend-cin-001` → **Settings → Configuration** (ou **TLS/SSL settings**):
+- **HTTPS Only:** **On**
+- **Minimum TLS Version:** **1.2** · **FTP state:** **Disabled**
+
+#### 3.4 VNet Integration — para o Web App alcançar a `vm-data` (ainda na VM)
+
+O banco ainda está na `vm-data` (IP privado, outra região). Para o Web App falar com ele, ative **VNet Integration**.
+
+1. Primeiro, crie uma **subnet dedicada** na VNet de app (o App Service exige uma subnet só dele): Portal → `vnet-prd-inf-cin-001` → **Subnets** → **+ Subnet** → **Name:** `snet-prd-inf-appsvc-cin-001` · **Range:** `10.20.3.0/24` · **Delegation:** **Microsoft.Web/serverFarms** → **Save**.
+2. No `app-prd-tk-bend-cin-001` → **Settings → Networking** → **Outbound traffic → VNet integration** → **Add** → escolha `vnet-prd-inf-cin-001` / `snet-prd-inf-appsvc-cin-001`.
+3. Ainda em Networking, garanta **Route All / Outbound internet traffic** habilitado para que o tráfego vá pela VNet (e alcance a outra região via **peering**).
+
+> 💡 **Por que isso é necessário (por enquanto)?** Azure SQL terá endpoint público, mas o **SQL Server na VM não** — ele só responde no IP privado. A VNet Integration "pluga" o Web App na sua rede; o **peering global** (que você criou na fase VM) leva o pacote até a `vm-data` em Australia East. A NSG do banco já libera `1433` da faixa `10.20.0.0/16`, então **não precisa mexer no NSG**. Na **Fase 5** essa integração é removida.
+
+#### 3.5 App Settings + Connection String do banco
+
+Aqui separamos as variáveis **não-banco** (App Settings) do **banco** (Connection String, numa aba própria — mais correto e mascarado no Portal).
+
+**(a) App Settings** — `app-prd-tk-bend-cin-001` → **Settings → Environment variables → App settings** → **+ Add** (uma por uma) → **Apply**:
+
+| Nome | Valor |
+|---|---|
+| `JWT_SECRET` | a mesma string longa que você usou na VM |
+| `JWT_EXPIRES_IN` | `7d` |
+| `FRONTEND_URL` | `*` (ajustamos para a URL do front na Fase 4) |
+| `WEBSITE_NODE_DEFAULT_VERSION` | `~20` |
+
+> ⚠️ **Não existe `PORT=80` aqui.** No App Service **quem define a porta é a plataforma** — o iisnode injeta a porta certa e sua API já lê `process.env.PORT`. Por isso **não** adicione `PORT` nem `HOST`.
+
+**(b) Connection String do banco** — em vez de `DB_SERVER`/`DB_USER`/`DB_PASSWORD` em App settings, o banco vai na aba **Connection strings**:
+
+1. `app-prd-tk-bend-cin-001` → **Settings → Environment variables → Connection strings** → **+ Add**.
+2. **Name:** `DefaultConnection` · **Type:** **SQLServer** _(é SQL Server na VM; na Fase 5, ao migrar para Azure SQL, muda para **SQLAzure**)_.
+3. **Value** (string **pronta** — troque só `<IP_DB>` pelo IP privado da `vm-data`):
+   ```text
+   Server=<IP_DB>,1433;Database=FIFA2026Tickets;User Id=adminsql;Password=Partiunuvem@2026;Encrypt=true;TrustServerCertificate=true
+   ```
+4. **Apply** (reinicia sozinho).
+
+> 🔌 **Como o App Service entrega isso ao Node:** a connection string vira uma **variável de ambiente com prefixo conforme o Type** — `SQLServer` → `SQLCONNSTR_DefaultConnection`, `SQLAzure` → `SQLAZURECONNSTR_DefaultConnection`, `Custom` → `CUSTOMCONNSTR_DefaultConnection`.
+
+> ⚙️ **Ajuste necessário no código (uma vez).** O `src/config/database.js` atual lê variáveis individuais (`DB_SERVER`…) — para consumir a connection string, faça-o **priorizá-la**, com fallback para as variáveis (mantém compatibilidade com a VM e o dev local):
+> ```js
+> const sql = require('mssql');
+>
+> // Prioriza a Connection String do App Service (qualquer prefixo); fallback p/ DB_*
+> const connectionString =
+>   process.env.SQLAZURECONNSTR_DefaultConnection ||
+>   process.env.SQLCONNSTR_DefaultConnection ||
+>   process.env.CUSTOMCONNSTR_DefaultConnection ||
+>   process.env.DB_CONNECTION_STRING;
+>
+> const config = connectionString || {
+>   server: process.env.DB_SERVER,
+>   port: parseInt(process.env.DB_PORT) || 1433,
+>   user: process.env.DB_USER,
+>   password: process.env.DB_PASSWORD,
+>   database: process.env.DB_NAME,
+>   options: { encrypt: true, trustServerCertificate: true, enableArithAbort: true },
+>   pool: { max: 10, min: 0, idleTimeoutMillis: 30000 }
+> };
+> // ...resto igual: pool = await sql.connect(config);
+> ```
+> O `sql.connect()` aceita tanto o objeto quanto a string. Como o ajuste é no código, **republique** (zip deploy da 3.2) depois de alterar.
+
+> 💡 **Mudou App Setting/Connection String? O Web App reinicia sozinho** — não precisa de `iisreset`. Com a **VNet (3.4)** + a **connection string** salvas (e o código ajustado e republicado), o `/api/health/db` passa a conectar.
 
 #### 3.6 Testar o backend novo (isolado, pelo endereço do Web App)
 
@@ -368,7 +431,7 @@ Invoke-RestMethod "$BEND/api/health/db"        # deve mostrar connected:true
 (Invoke-RestMethod "$BEND/api/matches").matches.Count   # 104
 ```
 
-> 💡 **O `/api/health/db` é seu melhor amigo aqui.** Se vier `ETIMEOUT/ESOCKET` → a VNet Integration/peering não está roteando até a `vm-data` (reveja 3.3). Se vier `ELOGIN` → confira `DB_USER`/`DB_PASSWORD` nas App Settings. **Mudou App Setting? O Web App reinicia sozinho** (diferente do iisnode na VM, que exigia `iisreset`).
+> 💡 **O `/api/health/db` é seu melhor amigo aqui.** Se vier `ETIMEOUT/ESOCKET` → a VNet Integration/peering não está roteando até a `vm-data` (reveja 3.4). Se vier `ELOGIN` → confira o `User Id`/`Password` na **Connection String** `DefaultConnection`. **Mudou App Setting/Connection String? O Web App reinicia sozinho** (diferente do iisnode na VM, que exigia `iisreset`).
 
 #### 3.7 Reapontar o front (ainda na VM) para o Web App backend
 
@@ -401,7 +464,7 @@ A `vm-fend` ainda serve o site e faz proxy `/api/*` para a `vm-bend`. Troque o d
 
 #### 4.2 Publicar o conteúdo (zip deploy)
 
-> 🧩 **Mesmo método do backend (linha A).** O frontend é **estático** (HTML/JS/CSS + `web.config`), não um framework Node — então, diferente do backend, o assistant **até conseguiria** publicá-lo. Mas, por **consistência** (e para não depender do comportamento da ferramenta), usamos o **mesmo zip deploy** da Fase 3.5 aqui — trocando só a pasta e o nome do Web App.
+> 🧩 **Mesmo método do backend (linha A).** O frontend é **estático** (HTML/JS/CSS + `web.config`), não um framework Node — então, diferente do backend, o assistant **até conseguiria** publicá-lo. Mas, por **consistência** (e para não depender do comportamento da ferramenta), usamos o **mesmo zip deploy** da Fase 3.2 aqui — trocando só a pasta e o nome do Web App.
 
 **Passo 1 — Empacotar (na `vm-fend`, via RDP):**
 
@@ -412,7 +475,7 @@ Compress-Archive -Path .\fifa2026-web\* -DestinationPath .\fifa2026-web.zip -For
 
 > ⚠️ Igual ao backend: o `\*` mantém o `web.config` e os arquivos estáticos na **raiz** do zip.
 
-**Passo 2 — Publicar** (escolha **A** ou **B**, exatamente como na Fase 3.5):
+**Passo 2 — Publicar** (escolha **A** ou **B**, exatamente como na Fase 3.2):
 
 **▶️ Opção A — Azure CLI na `vm-fend`:**
 ```powershell
@@ -516,11 +579,12 @@ Do seu computador, abra **`https://app-prd-tk-fend-cin-001.azurewebsites.net`**:
 
 Com os dados no Azure SQL, atualize o backend e **corte a dependência da VM**:
 
-1. `app-prd-tk-bend-cin-001` → **App settings** → atualize:
-   - `DB_SERVER` = `sql-prd-tk-cin-001.database.windows.net`
-   - `DB_USER` = `sqladmin` · `DB_PASSWORD` = *(a senha do Azure SQL admin)*
-   - (`DB_NAME` e `DB_PORT` continuam `FIFA2026Tickets` / `1433`)
-   - **Apply** (reinicia).
+1. `app-prd-tk-bend-cin-001` → **Connection strings** → edite `DefaultConnection`, mude o **Type** para **SQLAzure** e troque o **Value** pela string do Azure SQL:
+   ```text
+   Server=sql-prd-tk-cin-001.database.windows.net,1433;Database=FIFA2026Tickets;User Id=sqladmin;Password=<senha-do-Azure-SQL-admin>;Encrypt=true;TrustServerCertificate=false
+   ```
+   **Apply** (reinicia sozinho).
+   > 💡 Note o `TrustServerCertificate=false`: o Azure SQL tem **certificado válido** (diferente do SQL Server da VM, que era self-signed → `true`).
 2. **Remova a VNet Integration** (não precisa mais — Azure SQL é público com firewall): `app-prd-tk-bend-cin-001` → **Networking** → **VNet integration** → **Disconnect**.
 
 #### 5.5 Validar
@@ -677,7 +741,7 @@ Tudo na VNet que você já tem (`vnet-prd-inf-cin-001`, `10.20.0.0/16`):
 |---|---|---|
 | Subnet de Private Endpoints | `snet-prd-inf-pe-cin-001` | `10.20.5.0/24` · PE network policies **Disabled** |
 | Subnet integração — Front | `snet-prd-inf-appf-cin-001` | `10.20.4.0/24` · delegada `Microsoft.Web/serverFarms` |
-| Subnet integração — API | `snet-prd-inf-appsvc-cin-001` | `10.20.3.0/24` · **reusa** a da Fase 3.3 (delegada) |
+| Subnet integração — API | `snet-prd-inf-appsvc-cin-001` | `10.20.3.0/24` · **reusa** a da Fase 3.4 (delegada) |
 | Plano da API | `asp-prd-tk-bend-cin-001` | Windows **B1** · só da API |
 | Private Endpoint — API | `pe-prd-tk-bend-cin-001` | IP privado da API |
 | Private Endpoint — SQL | `pe-prd-tk-sql-cin-001` | IP privado do SQL |
@@ -690,7 +754,7 @@ Tudo na VNet que você já tem (`vnet-prd-inf-cin-001`, `10.20.0.0/16`):
 Portal → `vnet-prd-inf-cin-001` → **Subnets** → **+ Subnet**:
 1. **`snet-prd-inf-pe-cin-001`** · `10.20.5.0/24` · **Network policies for private endpoints: Disabled** · sem delegação.
 2. **`snet-prd-inf-appf-cin-001`** · `10.20.4.0/24` · **Delegation: Microsoft.Web/serverFarms**.
-3. A **API** reusa a `snet-prd-inf-appsvc-cin-001` (`10.20.3.0/24`) criada na Fase 3.3 (se removeu, recrie delegada).
+3. A **API** reusa a `snet-prd-inf-appsvc-cin-001` (`10.20.3.0/24`) criada na Fase 3.4 (se removeu, recrie delegada).
 
 > 💡 Uma subnet de integração é **dedicada a um plano**. Como front e API ficarão em **planos diferentes** (9.4), cada um precisa da **sua** subnet. Os Private Endpoints **compartilham** uma subnet.
 
@@ -716,7 +780,7 @@ Portal → `vnet-prd-inf-cin-001` → **Subnets** → **+ Subnet**:
 3. **Agora sim:** `sql-prd-tk-cin-001` → **Networking → Public access → Disable** → **Save**.
 4. **Revalide** `/api/health/db` → continua connected. 🎉 Banco privado.
 
-> 💡 O `DB_SERVER` **não mudou** — o mesmo FQDN agora resolve privado (VNet integ. + Route All + zona DNS linkada).
+> 💡 O **host no `DefaultConnection`** **não mudou** — o mesmo FQDN agora resolve privado (VNet integ. + Route All + zona DNS linkada).
 
 #### 9.7 Private Endpoint da API (público ainda ligado)
 
@@ -754,10 +818,10 @@ Ao privatizar, duas tarefas mudam — e isso é **esperado**:
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
 | Front no Web App abre, mas `/api/*` dá **404/502** | Falta o `applicationHost.xdt` (proxy do ARR não habilitado) | Crie `site/applicationHost.xdt` (Fase 4.4) **em `site/`, não `wwwroot/`** + **Restart** |
-| `/api/*` proxia, mas backend dá **500** | App Settings erradas, ou `web.config`/`node_modules` não vieram no deploy | Veja **Log stream** (Portal → backend → **Monitoring → Log stream**); confirme as App Settings (3.4); republique se faltou conteúdo |
-| `/api/health/db` dá **ETIMEOUT/ESOCKET** (Fase 3) | VNet Integration/peering não roteia até a `vm-data` | Confirme a subnet delegada `Microsoft.Web/serverFarms` + **Route All** (3.3); peering das VNets `Connected`; NSG do banco libera `1433` de `10.20.0.0/16` |
+| `/api/*` proxia, mas backend dá **500** | App Settings erradas, ou `web.config`/`node_modules` não vieram no deploy | Veja **Log stream** (Portal → backend → **Monitoring → Log stream**); confirme as App Settings (3.5); republique se faltou conteúdo |
+| `/api/health/db` dá **ETIMEOUT/ESOCKET** (Fase 3) | VNet Integration/peering não roteia até a `vm-data` | Confirme a subnet delegada `Microsoft.Web/serverFarms` + **Route All** (3.4); peering das VNets `Connected`; NSG do banco libera `1433` de `10.20.0.0/16` |
 | `/api/health/db` dá **ETIMEOUT** (Fase 5, já no Azure SQL) | Firewall do Azure SQL sem "Allow Azure services" | `sql-prd-tk-cin-001` → **Networking** → **Allow Azure services = Yes** |
-| `/api/health/db` dá **ELOGIN** | `DB_USER`/`DB_PASSWORD` não batem com o destino | Antes da Fase 5: `adminsql`/`Partiunuvem@2026` (VM). Depois: `sqladmin`/senha do Azure SQL |
+| `/api/health/db` dá **ELOGIN** | `User Id`/`Password` da Connection String `DefaultConnection` não batem com o destino | Antes da Fase 5: `adminsql`/`Partiunuvem@2026` (VM). Depois: `sqladmin`/senha do Azure SQL |
 | App Service Migration Assistant **não acha o site** | Rodando fora da VM de origem, ou IIS parado | Instale e rode o assistant **dentro** da `vm-bend`/`vm-fend`; confirme o site no IIS Manager |
 | Mudei App Setting e **nada mudou** | Cache de instância | App Settings reiniciam o app, mas force um **Restart** se preciso. (No App Service **não** existe `iisreset`.) |
 | Migração do banco trava no **Integration Runtime** | IR não registrado/sem saída 443 | Reinstale o IR na `vm-data` com a chave do wizard; ou use o **Plano B do `.bacpac`** (5.3) |
@@ -778,7 +842,7 @@ Ao privatizar, duas tarefas mudam — e isso é **esperado**:
 
 | Onde | Nome | Origem / Exemplo |
 |---|---|---|
-| 🔢 | *IP_DB* | IP privado da `vm-data` (`10.30.1.x`) — usado nas App Settings do backend **até a Fase 5** |
+| 🔢 | *IP_DB* | IP privado da `vm-data` (`10.30.1.x`) — usado na **Connection String** do backend **até a Fase 5** |
 | 🔐 | *SQL/VM adminsql* | `adminsql` / `Partiunuvem@2026` — origem do banco (VM) |
 | 🔐 | *Azure SQL admin* | `sqladmin` / *(senha que você criou na Fase 5.1)* — destino do banco (PaaS) |
 | 🔐 | *JWT_SECRET* | a mesma string longa da fase VM |
@@ -787,11 +851,12 @@ Ao privatizar, duas tarefas mudam — e isso é **esperado**:
 | 🌐 | *Azure SQL FQDN* | `sql-prd-tk-cin-001.database.windows.net` |
 | 🌐 | *Domínio final* | `https://www.<seu-domínio>` (Fase 6) |
 
-**App Settings do `app-prd-tk-bend-cin-001`** (substituem o `.env` da VM):
+**Config do `app-prd-tk-bend-cin-001`** (substitui o `.env` da VM):
 
-`DB_SERVER` · `DB_PORT` · `DB_USER` · `DB_PASSWORD` · `DB_NAME` · `JWT_SECRET` · `JWT_EXPIRES_IN` · `FRONTEND_URL` · `WEBSITE_NODE_DEFAULT_VERSION`
+- **App Settings:** `JWT_SECRET` · `JWT_EXPIRES_IN` · `FRONTEND_URL` · `WEBSITE_NODE_DEFAULT_VERSION`
+- **Connection strings:** `DefaultConnection` (Type **SQLServer** na VM → **SQLAzure** na Fase 5) — substitui `DB_SERVER`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`. Requer o ajuste no `database.js` (Fase 3.5b).
 
-> 🔒 **Regra de ouro (continua valendo):** segredo nunca vai para o código nem para o repositório. Aqui eles saíram do `.env` na VM e foram para as **App Settings** do Web App — melhor, mas ainda em texto na configuração. _Próximo nível (§7):_ **Key Vault + Managed Identity**, onde o app lê o segredo sem nunca tê-lo na config.
+> 🔒 **Regra de ouro (continua valendo):** segredo nunca vai para o código nem para o repositório. Aqui eles saíram do `.env` na VM e foram para as **App Settings / Connection strings** do Web App — melhor, mas ainda em texto na configuração. _Próximo nível (§7):_ **Key Vault + Managed Identity**, onde o app lê o segredo sem nunca tê-lo na config.
 
 ---
 
@@ -801,7 +866,7 @@ Ao privatizar, duas tarefas mudam — e isso é **esperado**:
 
 O ambiente PaaS já entrega backups, HA e patch gerenciados. A **rede privada** (Private Endpoints + VNet Integration) já foi incorporada como **Fase 9** desta jornada. Um time de produção ainda adicionaria:
 
-1. **🔐 Azure Key Vault + Managed Identity** — tirar `DB_PASSWORD`/`JWT_SECRET` das App Settings. O Web App ganha uma **identidade gerenciada** e lê os segredos do Key Vault via *reference* — sem senha em lugar nenhum visível.
+1. **🔐 Azure Key Vault + Managed Identity** — tirar a senha do `DefaultConnection` e o `JWT_SECRET` da config (Connection strings / App Settings). O Web App ganha uma **identidade gerenciada** e lê os segredos do Key Vault via *reference* — sem senha em lugar nenhum visível.
 2. **📊 Application Insights** — telemetria de requisições, falhas e performance do app, sem instalar agente. Você "enxerga" o app em produção.
 3. **🚦 Front Door + WAF** — um Front Door com WAF na borda do frontend, filtrando ataques antes de chegar no app (a API e o banco já estão privados desde a Fase 9).
 4. **🤖 CI/CD com GitHub Actions (OIDC)** — em vez de publicar pelo assistant/zip à mão, um pipeline faz **build + deploy** a cada push, com autenticação sem segredo (OIDC). Com a API privada (Fase 9), o deploy passa a sair de um **runner na VNet**. _(Os workflows já existem no repo — veja `.github/workflows/`.)_
